@@ -6,9 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "db-sqlite3>=0.0.1",
+    "faker>=36.1.0",
     "fastapi>=0.115.8",
+    "numpy>=2.2.2",
     "openai>=1.61.1",
+    "pillow>=11.1.0",
     "pydantic>=2.10.6",
+    "pytesseract>=0.3.13",
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
     "sqlite-utils>=3.38",
