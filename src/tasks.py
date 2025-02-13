@@ -57,12 +57,13 @@ def run_datagen(user_email: str):
     subprocess.run(["python3","datagen.py",user_email, "--root", "./data"], check=True)
     
 
-
-def format_md():
-    subprocess.run(["npx","prettier@3.4.2","--write",f"{Data_dir}/format.md"],check=True)
+# Task A2
+def format_md(source_file):
+    md_file = Path(source_file)
+    subprocess.run(["npx","prettier@3.4.2","--write", md_file] ,check=True)
     
     
-    
+# Task A3
 def count_wednesdays(source_file,output_file):
     data_file = Path(source_file)
     output_file = Path(output_file)
@@ -92,11 +93,11 @@ def count_wednesdays(source_file,output_file):
     with output_file.open("w", encoding="utf-8") as f:
         f.write(str(wednesday_count) + "\n")
 
-    print(f"\n✅ Total Wednesdays: {wednesday_count}")
+    return(f"\n✅ Total Wednesdays: {wednesday_count}")
     print(f"⚠️ Skipped {error_count} invalid dates")
 
 
-
+# Task A4
 def sort_contacts():
     contact_file = Path(f"{Data_dir}/contacts.json")
     out_file = Path(f"{Data_dir}/contacts-sorted.json")
@@ -108,7 +109,7 @@ def sort_contacts():
     with out_file.open("w") as f:
         json.dump(sort_contacts, f, indent=4)
         
-        
+# Task A5
 def get_recent_logs():
     log_dir = Path(f"{Data_dir}/logs")
     output_file = Path(f"{Data_dir}/logs-recent.txt")
@@ -122,7 +123,7 @@ def get_recent_logs():
         
         
         
-        
+# Task A6
 def generate_md_index():
     docs_dir = Path(f"{Data_dir}/docs")
     index_file = Path(f"{Data_dir}/docs/index.json")
@@ -140,6 +141,7 @@ def generate_md_index():
         json.dump(index, f , indent=4)
         
 
+# Task A7
 def extract_email(source_file, output_file):
 
     email_file = Path(source_file)
@@ -166,9 +168,9 @@ def extract_email(source_file, output_file):
     print(f"✅ Extracted sender email: {sender_email}")
 
 
-def extract_card_number(image_path,output_file):
+def extract_credit_card_number(image_path,output_path):
     image_file = Path(image_path)
-    output_file = Path(output_file)
+    output_file = Path(output_path)
 
     image = Image.open(image_file)
     extracted_text = pytesseract.image_to_string(image)
