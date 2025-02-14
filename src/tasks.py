@@ -155,13 +155,18 @@ def count_days(source_file,output_file, day_name):
     """
     
     # ✅ Convert day name to its corresponding integer (Monday=0, Sunday=6)
-    days_of_week = ["Monday", "Tuesday", "Wednesday",
-                    "Thursday", "Friday", "Saturday", "Sunday"]
+    days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    days_of_weeks = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"]
 
-    if day_name not in days_of_week:
+    # ✅ Check if `day_name` is in either list
+    if day_name not in days_of_week and day_name not in days_of_weeks:
         return {"status": "error", "message": f"Invalid day: {day_name}"}
 
-    target_day = days_of_week.index(day_name)
+    # ✅ Find index correctly
+    if day_name in days_of_week:
+        target_day = days_of_week.index(day_name)
+    else:
+        target_day = days_of_weeks.index(day_name)
 
     # Read dates from file
     with data_file.open("r", encoding="utf-8") as f:

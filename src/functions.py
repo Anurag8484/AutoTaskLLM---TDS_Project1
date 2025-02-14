@@ -19,7 +19,7 @@ function_list ={
             "properties": {
                 "source_file": {"type": "string", "description": "Path to the file containing dates."},
                 "output_file": {"type": "string", "description": "Path where the result should be saved."},
-                "day_name": {"type": "string", "description": "Name of the day."}
+                "day_name": {"type": "string", "description": "Name of the day, If the day name is given in plural format like Wednesdays, change it to singular format Wednesday, and if name of day is any other language translate it to english language."}
             },
             "required": ["source_file", "output_file","day_name"],
             "additionalProperties": False
