@@ -1,32 +1,54 @@
-import sqlite3
+import shutil
+import subprocess
+import requests
 from pathlib import Path
 
-def calculate_gold_ticket_sales(db_file, output_file):
-    DB_FILE = Path(db_file)
-    OUTPUT_FILE = Path(output_file)
+def is_uv_installed():
+    return shutil.which("uv") is not None
 
-    if not DB_FILE.exists():
-        print("DB file not found")
-        return
-
+def install_uv():
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
+        print("📦 Installing 'uv' package...")
+        subprocess.run(["pip", "install", "uv"], check=True)
+        print("✅ 'uv' installed successfully!")
+    except subprocess.CalledProcessError:
+        raise RuntimeError("❌ Failed to install 'uv'. Please install it manually.")
 
-        cursor.execute("SELECT SUM(units * price) FROM tickets WHERE type = 'Gold'")
-        total_sales = cursor.fetchone()[0]
+def run_datagen(user_email: str):
+    DATA_DIR = Path("./data")  # Ensure data is stored in the correct directory
+    DATAGEN_URL = "https://raw.githubusercontent.com/sanand0/tools-in-data-science-public/tds-2025-01/project-1/datagen.py"
+    DATAGEN_SCRIPT = DATA_DIR / "datagen.py"  # Save script in data folder
+    try:
+        # Check if 'uv' is installed
+        if not is_uv_installed():
+            install_uv()
 
-        total_sales = total_sales if total_sales is not None else 0
+        # Ensure data directory exists
+        DATA_DIR.mkdir(exist_ok=True)
 
-        with OUTPUT_FILE.open("w", encoding="utf-8") as f:
-            f.write(str(total_sales) + "\n")
+        # Download the script if it doesn't exist
+        if not DATAGEN_SCRIPT.exists():
+            print(f"📥 Downloading datagen.py...")
+            response = requests.get(DATAGEN_URL, timeout=10)
+            response.raise_for_status()  # Raise error for bad response
+            DATAGEN_SCRIPT.write_text(response.text, encoding="utf-8")
+            print(f"✅ Saved datagen.py to {DATAGEN_SCRIPT}")
 
-        print(f"Total 'Gold' ticket sales are: {total_sales}")
+        # Run the script with user_email
+        print(f"🚀 Running datagen.py with email: {user_email}")
+        subprocess.run(["python3", str(DATAGEN_SCRIPT), user_email, "--root", "./data"], check=True)
 
-    except sqlite3.Error as e:
-        print(f"Database Error: {e}")
-    finally:
-        conn.close()
+        return {"status": "success", "message": "Data generation completed successfully."}
 
-# Run the function
-calculate_gold_ticket_sales('./data/ticket-sales.db', './data/sales.txt')
+    except requests.RequestException as e:
+        return {"status": "error", "message": f"Failed to download datagen.py: {str(e)}"}
+
+    except subprocess.CalledProcessError as e:
+        return {"status": "error", "message": f"Error executing datagen.py: {str(e)}"}
+
+    except Exception as e:
+        return {"status": "error", "message": f"Unexpected error: {str(e)}"}
+
+# Run the data generation script
+result = run_datagen("23f1002560@ds.study.iitm.ac.in")
+print(result)

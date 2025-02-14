@@ -159,6 +159,7 @@ You must generate Python scripts that execute the following tasks:
 - **transcribe_audio(audio_path, output_text_file)** → Convert MP3 speech to text.  
 ### **✅ Fix: Strip Triple Backticks Before Saving**
 Modify the part of your code where `generated_task.py` is being written.
+Import all libraries need for code to run
 ---
 
 ### **🚨 Security & Compliance Rules**
@@ -196,6 +197,7 @@ import sqlite3
 import git
 import pandas as pd
 import whisper
+import shutil
 
 
 
