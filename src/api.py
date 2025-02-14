@@ -1,4 +1,8 @@
-from SYS_MSG import SYSTEM_MESSAGE
+from pathlib import Path
+import subprocess
+import json
+import re
+from SYS_MSG import S2, SYSTEM_MESSAGE
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -57,57 +61,163 @@ def normalize_path(file_path: str) -> str:
 #         return {"status": "All tasks completed successfully"}
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=str(e))
-    
+@app.get("/read")
+async def read_file(path: str):
+    """Returns the content of a specified file if it exists within /data/"""
+    DATA_DIR = Path("data")
+    file_path = DATA_DIR / Path(path).name  # Restrict path to `/data/`
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return {"content": file_path.read_text(encoding="utf-8")}
+
+   
+# @app.post("/run")
+# async def run_task(task: str):
+#     """Processes tasks using OpenAI function calling."""
+#     Lfunctions = list(function_list.values())
+#     try:
+#         payload = {
+#             "model": "gpt-4o-mini",
+#             "messages": [
+#                 {"role": "system", "content": SYSTEM_MESSAGE},
+#                 {"role": "user", "content": task}
+#             ],
+#             "functions": Lfunctions,
+#             "function_call": "auto"
+#         }
+
+#         response = httpx.post(chat_url, headers=headers, json=payload)
+#         response_json = response.json()
+
+#         print("🔎 FULL OPENAI RESPONSE:", json.dumps(response_json, indent=4))
+        
+#         tool_calls = response_json["choices"][0]["message"].get("function_call", {})
+
+#         if not tool_calls:
+#             raise HTTPException(status_code=400, detail="No function call detected.")
+
+#         function_name = tool_calls.get("name")
+#         raw_args = tool_calls.get("arguments", "{}")
+
+#         try:
+#             function_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+#         except json.JSONDecodeError:
+#             raise HTTPException(status_code=500, detail="Invalid JSON format in function arguments.")
+
+#         if function_name.startswith("functions."):
+#             function_name = function_name.split(".")[-1]
+
+#         if function_name not in globals():
+#             raise HTTPException(status_code=400, detail=f"Unknown function: {function_name}")
+
+#         print(f"🔎 OpenAI Selected Function: {function_name}")
+#         print(f"🔎 Arguments: {function_args}")
+
+#         # Execute the function
+#         result = globals()[function_name](**function_args)
+
+#         return {"task": task, "executed_function": function_name, "result": result}
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error in function execution: {str(e)}")
+
+
+app = FastAPI()
+
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Ensure API key is set
+
+SYSTEM_MESSAGE = """
+You are an AI-powered automation agent that generates and executes Python code dynamically.
+- Ensure the generated code is **fully executable** without manual modifications.
+- If an error occurs, analyze the **error message and input file format** and **fix the issue automatically**.
+- Read the input file before processing to detect its format.
+- Do **not** generate explanations, just executable Python code.
+- Ensure file paths remain within `/data/`.
+- If a task is unclear, return "unknown_task".
+"""
+
+
+def execute_python_code(code: str):
+    """Saves and executes Python code, returning output or errors."""
+    temp_file = "generated_task.py"
+
+    with open(temp_file, "w") as f:
+        f.write(code)
+
+    result = subprocess.run(["python3", temp_file],
+                            capture_output=True, text=True)
+    return result.stdout, result.stderr
+
+
 @app.post("/run")
 async def run_task(task: str):
-    """Processes tasks using OpenAI function calling."""
-    Lfunctions = list(function_list.values())
+    """Processes a task by generating, executing, and self-correcting Python code."""
     try:
+        # 🔹 1️⃣ Generate Initial Code
         payload = {
             "model": "gpt-4o-mini",
             "messages": [
-                {"role": "system", "content": SYSTEM_MESSAGE},
-                {"role": "user", "content": task}
+                {"role": "system", "content": S2},
+                {"role": "user", "content": f"Write a Python script to: {task}"}
             ],
-            "functions": Lfunctions,
-            "function_call": "auto"
+            "temperature": 0
         }
 
-        response = httpx.post(chat_url, headers=headers, json=payload)
+        headers = {"Authorization": f"Bearer {API_KEY}",
+                   "Content-Type": "application/json"}
+        response = requests.post(chat_url, headers=headers, json=payload)
         response_json = response.json()
 
-        print("🔎 FULL OPENAI RESPONSE:", json.dumps(response_json, indent=4))
-        
-        tool_calls = response_json["choices"][0]["message"].get("function_call", {})
+        # 🔍 Extract generated code
+        code = response_json["choices"][0]["message"]["content"]
+        code = re.sub(r"^```python\n|```$", "", code,
+                      flags=re.MULTILINE).strip()
 
-        if not tool_calls:
-            raise HTTPException(status_code=400, detail="No function call detected.")
+        # 🔥 2️⃣ Execute Initial Code
+        output, error = execute_python_code(code)
 
-        function_name = tool_calls.get("name")
-        raw_args = tool_calls.get("arguments", "{}")
+        # ✅ Success Case
+        if not error:
+            return {"task": task, "status": "Completed", "output": output}
 
-        try:
-            function_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail="Invalid JSON format in function arguments.")
+        # 🔄 3️⃣ If Error Occurs → Ask OpenAI to Fix
+        print(f"❌ Error Detected: {error}")
 
-        if function_name.startswith("functions."):
-            function_name = function_name.split(".")[-1]
+        fix_payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": S2},
+                {"role": "user", "content": f"The following Python script failed:\n\n{code}\n\nError:\n{error}\n\nFix the issue and return corrected code."}
+            ],
+            "temperature": 0
+        }
 
-        if function_name not in globals():
-            raise HTTPException(status_code=400, detail=f"Unknown function: {function_name}")
+        fix_response = requests.post(
+            OPENAI_API_URL, headers=headers, json=fix_payload)
+        fix_response_json = fix_response.json()
 
-        print(f"🔎 OpenAI Selected Function: {function_name}")
-        print(f"🔎 Arguments: {function_args}")
+        # 🔍 Extract Fixed Code
+        fixed_code = fix_response_json["choices"][0]["message"]["content"]
+        fixed_code = re.sub(
+            r"^\s*```[\w]*\n|\s*```$", "", fixed_code, flags=re.MULTILINE).strip()
+        print(fixed_code)  # Debug output
 
-        # Execute the function
-        result = globals()[function_name](**function_args)
 
-        return {"task": task, "executed_function": function_name, "result": result}
+        # 🔥 4️⃣ Execute Fixed Code
+        final_output, final_error = execute_python_code(fixed_code)
+
+        if not final_error:
+            return {"task": task, "status": "Completed After Fix", "output": final_output}
+        else:
+            return {"task": task, "status": "Failed", "error": final_error}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in function execution: {str(e)}")
-  
+        raise HTTPException(
+            status_code=500, detail=f"Critical Error: {str(e)}")
+
 # @app.post("/run")
 # async def run_task(task: str):
 #     """Processes tasks using OpenAI function calling."""
