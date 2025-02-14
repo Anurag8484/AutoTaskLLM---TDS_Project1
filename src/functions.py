@@ -1,14 +1,27 @@
 function_list ={
-    "count_wednesdays": {
-        "name": "count_wednesdays",
+    "run_datagen": {
+        "name": "run_datagen",
+        "description": " Runs the data generation script with email address to generate necessary files in './data/'",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_email": {"type": "string", "description": "Email address of user."},
+            },
+            "required": ["user_email"],
+            "additionalProperties": False
+        }
+    },
+    "count_days": {
+        "name": "count_days",
         "description": "Count the number of Wednesdays in a given file.",
         "parameters": {
             "type": "object",
             "properties": {
                 "source_file": {"type": "string", "description": "Path to the file containing dates."},
-                "output_file": {"type": "string", "description": "Path where the result should be saved."}
+                "output_file": {"type": "string", "description": "Path where the result should be saved."},
+                "day_name": {"type": "string", "description": "Name of the day."}
             },
-            "required": ["source_file", "output_file"],
+            "required": ["source_file", "output_file","day_name"],
             "additionalProperties": False
         }
     },
@@ -19,8 +32,8 @@ function_list ={
             "type": "object",
             "properties": {
                 "source_file": {"type": "string", "description": "Path to the file containing markdown file."},
-                "output_file": {"type": "string", "description": "Path where the result should be saved."}
                 },
+            "required": ["source_file"],
             "additionalProperties": False
         }
     },
@@ -31,8 +44,10 @@ function_list ={
             "type": "object",
             "properties": {
                 "source_file": {"type": "string", "description": "Path to the file containing contacts file."},
-                "output_file": {"type": "string", "description": "Path where the result should be saved."}
+                "output_file": {"type": "string", "description": "Path where the result should be saved."},
+                "sort_field": {"type": "string", "description": "Field on which we have to sort source file."}
                 },
+            "required": ["source_file", "output_file", "sort_field"],
             "additionalProperties": False
         }
     },
@@ -43,8 +58,10 @@ function_list ={
             "type": "object",
             "properties": {
                 "source_file": {"type": "string", "description": "Path to the file containing logs."},
-                "output_file": {"type": "string", "description": "Path where the result should be saved."}
+                "output_file": {"type": "string", "description": "Path where the result should be saved."},
+                "recent": {"type": "string", "description": "This tells of how much recent logs we want."}
                 },
+            "required": ["source_file", "output_file", "recent"],
             "additionalProperties": False
         }
     },
@@ -57,11 +74,12 @@ function_list ={
                 "source_file": {"type": "string", "description": "Path to the file containing md files."},
                 "output_file": {"type": "string", "description": "Path where the result should be saved."}
                 },
+            "required": ["source_file", "output_file"],
             "additionalProperties": False
         }
     },
-    "extract_email": {
-        "name": "extract_email",
+    "extract_sender_email": {
+        "name": "extract_sender_email",
         "description": "Extracts the sender's email address from an email file.",
         "parameters": {
             "type": "object",
@@ -69,6 +87,7 @@ function_list ={
                 "source_file": {"type": "string", "description": "Path to the file containing email."},
                 "output_file": {"type": "string", "description": "Path where the result should be saved."}
                 },
+            "required": ["source_file", "output_file"],
             "additionalProperties": False
         }
     },
@@ -78,9 +97,10 @@ function_list ={
         "parameters": {
             "type": "object",
             "properties": {
-                "image_path": {"type": "string", "description": "Path to the file containing credit card image."},
+                "source_file": {"type": "string", "description": "Path to the file containing credit card image."},
                 "output_file": {"type": "string", "description": "Path where the result should be saved."}
                 },
+            "required": ["source_file", "output_file"],
             "additionalProperties": False
         }
     },
@@ -93,6 +113,7 @@ function_list ={
                 "source_file": {"type": "string", "description": "Path to the file containing comments file."},
                 "output_file": {"type": "string", "description": "Path where the result should be saved."}
                 },
+            "required": ["source_file", "output_file"],
             "additionalProperties": False
         }
     },
@@ -105,6 +126,7 @@ function_list ={
                 "source_file": {"type": "string", "description": "Path to the file containing database."},
                 "output_file": {"type": "string", "description": "Path where the result should be saved."}
                 },
+            "required": ["source_file", "output_file"],
             "additionalProperties": False
         }
     },
@@ -173,7 +195,7 @@ function_list ={
                 "width": {"type": "integer", "description": "Width of the resized image."},
                 "height": {"type": "integer", "description": "Height of the resized image."}
             },
-            "required": ["image_path", "output_path", "width", "height"],
+            "required": ["image_path", "output_path"],
             "additionalProperties": False
 
         }
