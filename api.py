@@ -1,3 +1,78 @@
+from pathlib import Path
+import subprocess
+import re
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import requests
+import uvicorn
+
+S2 = """
+You are an AI-powered automation agent responsible for dynamically generating and executing Python code with no comments or fencing to complete user tasks.  
+Your primary function is to transform plain English instructions into **fully executable, error-free Python scripts**.
+You must **self-correct** errors when they occur and reattempt execution until successful.  
+
+---
+
+### **🛠️ General Rules for Execution**
+1️⃣ **Always generate Python code that is directly executable.**  
+2️⃣ **Ensure all file paths remain within `/data/`.** **Reject any request that accesses files outside `/data/`.**  
+3️⃣ **Never delete or modify files unless explicitly required.**  
+4️⃣ **Read input files before processing to determine their format.**  
+5️⃣ **If an error occurs during execution, analyze the error and regenerate a corrected version of the script.**  
+6️⃣ **Always include error handling in generated code** to avoid crashes.  
+7️⃣ **For unknown or unclear tasks, return `{"error": "unknown_task"}` instead of generating random code.**  - Only generate valid Python code.
+- Ensure file paths stay within /data/.
+- **ENSURE CORRECT FILE PATHS:** Convert `/data/filename` to `./data/filename` for compatibility.
+
+- Do NOT delete or modify system files.
+- Always return executable code, no explanations.
+
+---
+
+### **📌 Available Functions & Their Purposes**
+You must generate Python scripts that execute the following tasks:
+
+**🔹 Data Processing & Transformation**
+- **count_wednesdays(source_file, output_file)** → Count the number of Wednesdays in a file.  
+- **sort_contacts(source_file, output_file, sort_by="last_name")** → Sort contacts by last name (or another field if requested).  
+- **get_recent_logs(source_dir, output_file)** → Extract first lines of the 10 most recent log files.  
+- **generate_md_index(source_dir, output_file)** → Create an index of Markdown files based on their first H1 header.  
+- **convert_md_to_html(md_file, output_html_file)** → Convert Markdown to HTML.  
+- **filter_csv(csv_file, filter_column, filter_value, output_json_file)** → Filter a CSV file based on column values and save results as JSON.  
+
+**🔹 LLM-Powered Analysis**
+- **extract_email(source_file, output_file)** → Extract sender’s email address from an email file.  
+- **extract_credit_card_number(source_file, output_file)** → Extract a credit card number from an image and save it without spaces.  
+- **find_most_similar_comments(source_file, output_file)** → Find the most similar pair of comments in a file using embeddings.  
+
+**🔹 Web & API Tasks**
+- **fetch_api_data(api_url, output_file)** → Fetch data from an API and save it as JSON.  
+- **scrape_website(url, output_file)** → Extract text data from a website and save it.  
+
+**🔹 Database & Git Operations**
+- **calculate_gold_ticket_sales(db_file, output_file)** → Compute total sales for “Gold” ticket types in an SQLite database.  
+- **run_sql_query(db_file, query, output_file)** → Execute an SQL query and save the results.  
+- **clone_and_commit(repo_url, commit_message)** → Clone a GitHub repo, make changes, and commit.  
+
+**🔹 Media & Image Processing**
+- **resize_image(image_path, output_path, width, height)** → Resize an image to specific dimensions.  
+- **transcribe_audio(audio_path, output_text_file)** → Convert MP3 speech to text.  
+### **✅ Fix: Strip Triple Backticks Before Saving**
+Modify the part of your code where `generated_task.py` is being written.
+Import all libraries need for code to run
+---
+
+### **🚨 Security & Compliance Rules**
+🔴 **B1: Restrict File Access**  
+- Only allow **read/write operations within `/data/`**.  
+- If a user requests access outside `/data/`, return:  
+  {"error": "Access denied: Only `/data/` directory is allowed."}
+
+
+
+When using these functions outputs may correct so try out these if any error occurs:
 import shutil
 import os
 import json
@@ -23,6 +98,7 @@ import sqlite3
 import git
 import pandas as pd
 import whisper
+import shutil
 
 
 
@@ -53,19 +129,18 @@ Data_dir = "./data"
 
 # Task A1
 def is_uv_installed():
-    """
+   
     Checks if 'uv' is installed in the system.
-    
+
     Returns:
         bool: True if 'uv' is installed, False otherwise.
-    """
+
     return shutil.which("uv") is not None
 
 
 def install_uv():
-    """
+
     Installs 'uv' using pip.
-    """
     try:
         print("📦 Installing 'uv' package...")
         subprocess.run(["pip", "install", "uv"], check=True)
@@ -80,15 +155,13 @@ def install_uv():
 
 
 def run_datagen(user_email: str):
-    """
     Ensures 'uv' is installed, downloads and executes datagen.py to generate required data files.
 
     Args:
-        user_email (str): Email ID to pass as an argument.
+        user_email(str): Email ID to pass as an argument.
 
     Returns:
         dict: Success or error message.
-    """
     DATA_DIR = Path("data")  # Ensure data is stored in the correct directory
     # user_email = "23f1002560@ds.study.iitm.ac.in"
     DATAGEN_URL = "https://raw.githubusercontent.com/sanand0/tools-in-data-science-public/tds-2025-01/project-1/datagen.py"
@@ -124,39 +197,39 @@ def run_datagen(user_email: str):
 
     except Exception as e:
         return {"status": "error", "message": f"Unexpected error: {str(e)}"}
-    
+
 # def run_datagen(user_email: str):
 #     url = "https://raw.githubusercontent.com/sanand0/tools-in-data-science-public/tds-2025-01/project-1/datagen.py"
 #     subprocess.run(["curl","-O",url], check=True)
 #     subprocess.run(["python3","datagen.py",user_email, "--root", "./data"], check=True)
-    
+
 
 # Task A2
 def format_md(source_file):
     md_file = Path(source_file)
     subprocess.run(["npx","prettier@3.4.2","--write", md_file] ,check=True)
-    
-    
+
+
 # Task A3
 def count_days(source_file,output_file, day_name):
     data_file = Path(source_file)
     output_file = Path(output_file)
-    
-    """
+
     Counts the occurrences of a specified weekday in a given file.
-    
+
     Args:
-        source_file (str): Path to the file containing dates.
-        output_file (str): Path where the result should be saved.
-        day_name (str): The weekday to count (e.g., "Monday", "Tuesday").
+        source_file(str): Path to the file containing dates.
+        output_file(str): Path where the result should be saved.
+        day_name(str): The weekday to count(e.g., "Monday", "Tuesday").
 
     Returns:
         dict: Status message.
-    """
-    
+
     # ✅ Convert day name to its corresponding integer (Monday=0, Sunday=6)
-    days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    days_of_weeks = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"]
+    days_of_week = ["Monday", "Tuesday", "Wednesday",
+        "Thursday", "Friday", "Saturday", "Sunday"]
+    days_of_weeks = ["Mondays", "Tuesdays", "Wednesdays",
+        "Thursdays", "Fridays", "Saturdays", "Sundays"]
 
     # ✅ Check if `day_name` is in either list
     if day_name not in days_of_week and day_name not in days_of_weeks:
@@ -183,7 +256,7 @@ def count_days(source_file,output_file, day_name):
         try:
             parsed_date = dateutil.parser.parse(date_str)  # Parse full date
 
-            if parsed_date.weekday() == target_day:  
+            if parsed_date.weekday() == target_day:
                 day_count += 1
         except Exception as e:
             error_count += 1
@@ -199,93 +272,87 @@ def count_days(source_file,output_file, day_name):
 
 # Task A4
 def sort_contacts(source_file, output_file, sort_field):
-    """
-    Sorts contacts based on a given field (default: last_name).
-    
+    Sorts contacts based on a given field(default: last_name).
+
     Args:
-        source_file (str): Path to the contacts JSON file.
-        output_file (str): Path where sorted contacts will be saved.
-        sort_field (str): The field to sort by (e.g., "phone_number", "email").
-    
+        source_file(str): Path to the contacts JSON file.
+        output_file(str): Path where sorted contacts will be saved.
+        sort_field(str): The field to sort by(e.g., "phone_number", "email").
+
     Returns:
         dict: Status message.
-    """
-    
+
     contact_file = Path(source_file)
     out_file = Path(output_file)
-    
+
     with contact_file.open() as f:
         contacts = json.load(f)
     sort_contacts = sorted(contacts, key=lambda x: (x[sort_field]))
-    
+
     with out_file.open("w") as f:
         json.dump(sort_contacts, f, indent=4)
-        
+
 # Task A5
 def get_recent_logs(source_file, output_file,recent):
-    """
     Extracts the first line from the 10 most recent log files in a given directory.
 
     Args:
-        source_file (str): Path to the directory containing log files.
-        output_file (str): Path where the extracted log lines should be saved.
+        source_file(str): Path to the directory containing log files.
+        output_file(str): Path where the extracted log lines should be saved.
 
     Returns:
         dict: A message indicating success or failure.
-    
+
     Notes:
         - The logs are sorted based on their last modified timestamps.
         - Only `.log` files are considered.
         - If there are fewer than 10 log files, all available logs are processed.
-    """
     log_dir = Path(source_file)
     output_file = Path(output_file)
-    
-    log_files = sorted(log_dir.glob("*.log"), key = os.path.getmtime, reverse = True)[:int(recent)]       
-        
+
+    log_files = sorted(log_dir.glob("*.log"),
+                       key = os.path.getmtime, reverse = True)[:int(recent)]
+
     with output_file.open("w") as f:
         for log_file in log_files:
             with log_file.open() as lf:
                 f.write(lf.readline())
-        
-        
-        
+
+
+
 # Task A6
 def generate_md_index(source_file, output_file):
-    """
-    Creates an index of Markdown (.md) files in a specified directory.
+    Creates an index of Markdown(.md) files in a specified directory.
 
     Args:
-        source_file (str): Path to the directory containing Markdown files.
-        output_file (str): Path where the index JSON should be saved.
+        source_file(str): Path to the directory containing Markdown files.
+        output_file(str): Path where the index JSON should be saved.
 
     Returns:
         dict: A message indicating success or failure.
 
     Notes:
-        - Extracts the first H1 (`# Heading`) from each Markdown file.
+        - Extracts the first H1(`  # Heading`) from each Markdown file.
         - Saves results in a JSON format mapping filenames to titles.
         - Scans recursively within subdirectories.
-    """
     docs_dir = Path(source_file)
     index_file = Path(output_file)
     index = {}
-    
+
     for md_file in docs_dir.rglob("*.md"):
         relative_path = md_file.relative_to(docs_dir)
         with md_file.open() as f:
             for line in f:
                 if line.startswith("# "):
                     index[str(relative_path)] = line[2:].strip()
-                    break        
+                    break
 
     with index_file.open("w") as f:
         json.dump(index, f , indent=4)
-        
+
 
 # Task A7
 def extract_sender_email(source_file, output_file):
-    """
     Extracts the sender's email address from an email file.
 
     Args:
@@ -299,7 +366,6 @@ def extract_sender_email(source_file, output_file):
         - Uses an LLM to extract the email based on structured email headers.
         - The sender's email is assumed to be in the `From:` field.
         - If no valid email is found, the output file remains empty.
-    """
 
     email_file = Path(source_file)
     output_file = Path(output_file)
@@ -326,7 +392,6 @@ def extract_sender_email(source_file, output_file):
 
 
 def extract_credit_card_number(source_file,output_file):
-    """
     Extracts a credit card number from an image and saves it in a text file.
 
     Args:
@@ -340,7 +405,6 @@ def extract_credit_card_number(source_file,output_file):
         - Uses OCR to detect text in the image.
         - Extracts only numeric sequences resembling credit card numbers (typically 16 digits).
         - Removes spaces and formatting before saving.
-    """
     image_file = Path(source_file)
     output_file = Path(output_file)
 
@@ -357,7 +421,6 @@ def extract_credit_card_number(source_file,output_file):
 
 
 def find_most_similar_comments(source_file,output_file):
-    """
     Identifies the most similar pair of comments from a text file using embeddings.
 
     Args:
@@ -371,7 +434,6 @@ def find_most_similar_comments(source_file,output_file):
         - Uses OpenAI embeddings to compute similarity scores.
         - Finds and saves the most similar comment pair based on cosine similarity.
         - If fewer than two comments exist, the function exits gracefully.
-    """
     comments_file = Path(source_file)
     output_file = Path(output_file)
 
@@ -410,7 +472,6 @@ def find_most_similar_comments(source_file,output_file):
 
 
 def calculate_gold_tickets_sales( source_file, output_file):
-    """
     Calculates total sales for all "Gold" ticket purchases in a SQLite database.
 
     Args:
@@ -424,7 +485,6 @@ def calculate_gold_tickets_sales( source_file, output_file):
         - The database table must have `type`, `units`, and `price` columns.
         - Filters only rows where `type = 'Gold'`.
         - Computes total revenue as `sum(units * price)`.
-    """
     DB_FILE = Path(source_file)
     OUTPUT_FILE = Path(output_file)
 
@@ -474,7 +534,6 @@ async def run_all_tasks(user_email: str | None = None):
  # Task B3
  
 def fetch_api_data(api_url,output_file):
-    """
     Fetches data from a given API and saves it as a JSON file.
 
     Args:
@@ -489,7 +548,6 @@ def fetch_api_data(api_url,output_file):
         - Handles JSON responses and saves them directly to the output file.
         - If the API response is not JSON, it saves the raw text instead.
         - Includes error handling for network failures and invalid responses.
-    """
     
     try:
         response = requests.get(api_url)
@@ -510,7 +568,6 @@ def fetch_api_data(api_url,output_file):
  # Task B4:
  
 def clone_and_commit(repo_url, commit_message = "Automated commit"):
-    """
     Clones a GitHub repository and makes a commit with the provided message.
 
     Args:
@@ -524,7 +581,6 @@ def clone_and_commit(repo_url, commit_message = "Automated commit"):
         - The repository is cloned into a temporary directory.
         - Assumes the user has the necessary permissions to push changes.
         - If no changes are detected, no commit is made.
-    """
     repo_dir = Path("/data/repo")  
     
     if repo_dir.exists():
@@ -544,7 +600,6 @@ def clone_and_commit(repo_url, commit_message = "Automated commit"):
 
 # Task B5
 def run_sql_query(db_file, query, output_file):
-    """
     Executes an SQL query on an SQLite or DuckDB database and saves the result.
 
     Args:
@@ -559,7 +614,6 @@ def run_sql_query(db_file, query, output_file):
         - The function ensures only SELECT queries are allowed for security.
         - Saves the query output as a JSON file.
         - If the query fails, an error message is returned.
-    """
     db_file = Path(db_file)
     output_file = Path(output_file)
     
@@ -588,7 +642,6 @@ def run_sql_query(db_file, query, output_file):
 # Task B6:
 
 def scrape_website(url, output_file):
-    """
     Extracts and saves data from a given website URL.
 
     Args:
@@ -602,7 +655,6 @@ def scrape_website(url, output_file):
         - Extracts only visible text from the webpage.
         - May fail if the website blocks automated requests.
         - Uses BeautifulSoup or Selenium depending on complexity.
-    """
  
     try:
         response = requests.get(url)
@@ -619,7 +671,6 @@ def scrape_website(url, output_file):
 # Task B7
 
 def resize_image(image_path, output_path,width=300, height=300):
-    """
     Resizes an image to specified dimensions and saves it.
 
     Args:
@@ -635,7 +686,6 @@ def resize_image(image_path, output_path,width=300, height=300):
         - Maintains aspect ratio if only one dimension is provided.
         - Saves output in the same format as the original.
         - Raises an error if the image format is unsupported.
-    """
     
     img = Image.open(image_path)
     img = img.resize((width,height))
@@ -645,7 +695,6 @@ def resize_image(image_path, output_path,width=300, height=300):
 
 # Task B8
 def transcribe_audio(audio_path, output_text_file):
-    """
     Converts speech from an MP3 file into text using an LLM.
 
     Args:
@@ -659,7 +708,6 @@ def transcribe_audio(audio_path, output_text_file):
         - Uses OpenAI's Whisper model or another ASR tool for transcription.
         - Handles different audio formats by converting them to MP3.
         - Supports multi-language transcription if required.
-    """
     model = whisper.load_model("base")
     result = model.transcribe(audio_path)
     
@@ -671,7 +719,6 @@ def transcribe_audio(audio_path, output_text_file):
 # Task B9
 
 def convert_md_to_html(md_file,output_html_file):
-    """
     Converts a Markdown (.md) file into an HTML file.
 
     Args:
@@ -685,7 +732,6 @@ def convert_md_to_html(md_file,output_html_file):
         - Converts Markdown syntax to properly formatted HTML.
         - Supports embedded images and links.
         - Uses Python Markdown library for conversion.
-    """
     md_content = Path(md_file).read_text(encoding="utf-8")
     html_content = markdown.markdown(md_content)
     
@@ -699,7 +745,6 @@ def convert_md_to_html(md_file,output_html_file):
 
 
 def filter_csv(csv_file,filter_column, filter_value, output_json_file):
-    """
     Filters a CSV file by a specific column value and saves the result as JSON.
 
     Args:
@@ -715,7 +760,6 @@ def filter_csv(csv_file,filter_column, filter_value, output_json_file):
         - If multiple rows match the filter, all matching rows are included.
         - Saves output in JSON format for easy processing.
         - Raises an error if the filter column does not exist.
-    """
     df = pd.read_csv(csv_file)
     filtered_df = df[df[filter_column] == filter_value]
     
@@ -725,14 +769,151 @@ def filter_csv(csv_file,filter_column, filter_value, output_json_file):
     print(f"Filtered CSV saved as JSON to {output_json_file}")
 
  
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
+ """
+
+load_dotenv()
+
+API_KEY = os.getenv("AIR_PROXY_TOKEN")
+
+chat_url = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    # Allows all origins. Replace "*" with specific domains for better security.
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],
+)
+
+
+def normalize_path(file_path: str) -> str:
+    """
+    Converts '/data/' paths to './data/' for compatibility with the evaluation system.
+    """
+    if file_path.startswith("/data/"):
+        # Replace /data/ with ./data/
+        return str(Path("./data") / file_path[6:])
+    return file_path
+
+
+@app.get("/read")
+async def read_file(path: str):
+    """Returns the content of a specified file if it exists within /data/"""
+    DATA_DIR = Path("data")
+    file_path = DATA_DIR / Path(path).name  # Restrict path to `/data/`
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return {"content": file_path.read_text(encoding="utf-8")}
+
+   
+
+
+app = FastAPI()
+
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Ensure API key is set
+
+SYSTEM_MESSAGE = """
+You are an AI-powered automation agent that generates and executes Python code dynamically.
+- Ensure the generated code is **fully executable** without manual modifications.
+- If an error occurs, analyze the **error message and input file format** and **fix the issue automatically**.
+- Read the input file before processing to detect its format.
+- Do **not** generate explanations, just executable Python code.
+- Ensure file paths remain within `/data/`.
+- If a task is unclear, return "unknown_task".
+"""
+
+
+def execute_python_code(code: str):
+    """Saves and executes Python code, returning output or errors."""
+    temp_file = "generated_task.py"
+
+    with open(temp_file, "w") as f:
+        f.write(code)
+
+    result = subprocess.run(["python3", temp_file],
+                            capture_output=True, text=True)
+    return result.stdout, result.stderr
+
+
+@app.post("/run")
+async def run_task(task: str):
+    """Processes a task by generating, executing, and self-correcting Python code."""
+    try:
+        # 🔹 1️⃣ Generate Initial Code
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": S2},
+                {"role": "user", "content": f"Write a Python script to: {task}"}
+            ],
+            "temperature": 0
+        }
+
+        headers = {"Authorization": f"Bearer {API_KEY}",
+                   "Content-Type": "application/json"}
+        response = requests.post(chat_url, headers=headers, json=payload)
+        response_json = response.json()
+
+        # 🔍 Extract generated code
+        code = response_json["choices"][0]["message"]["content"]
+        code = re.sub(r"^```python\n|```$", "", code,
+                      flags=re.MULTILINE).strip()
+
+        # 🔥 2️⃣ Execute Initial Code
+        output, error = execute_python_code(code)
+
+        # ✅ Success Case
+        if not error:
+            return {"task": task, "status": "Completed", "output": output}
+
+        # 🔄 3️⃣ If Error Occurs → Ask OpenAI to Fix
+        print(f"❌ Error Detected: {error}")
+
+        fix_payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": S2},
+                {"role": "user", "content": f"The following Python script failed:\n\n{code}\n\nError:\n{error}\n\nFix the issue and return corrected code."}
+            ],
+            "temperature": 0
+        }
+
+        fix_response = requests.post(
+            OPENAI_API_URL, headers=headers, json=fix_payload)
+        fix_response_json = fix_response.json()
+
+        # 🔍 Extract Fixed Code
+        fixed_code = fix_response_json["choices"][0]["message"]["content"]
+        fixed_code = re.sub(
+            r"^\s*```[\w]*\n|\s*```$", "", fixed_code, flags=re.MULTILINE).strip()
+        print(fixed_code)  # Debug output
+
+
+        # 🔥 4️⃣ Execute Fixed Code
+        final_output, final_error = execute_python_code(fixed_code)
+
+        if not final_error:
+            return {"task": task, "status": "Completed After Fix", "output": final_output}
+        else:
+            return {"task": task, "status": "Failed", "error": final_error}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Critical Error: {str(e)}")
+
+
+
+
+    
+if __name__ == "__main__":
+    uvicorn.run("api:app", host="127.0.0.1", port=8000, reload=True)
