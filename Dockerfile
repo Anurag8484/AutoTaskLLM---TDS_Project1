@@ -1,28 +1,37 @@
 # Use an official Python base image
-FROM python:3.12
+FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV AIPROXY_TOKEN=${AIPROXY_TOKEN}
+ARG AIPROXY_TOKEN
+ENV AIPROXY_TOKEN=$AIPROXY_TOKEN
+ENV PYTHONPATH="/app"
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy project files to the container
-COPY . /app
-
-# Install essential system packages and dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
+# Install system dependencies (Tesseract, Node.js, npm)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
-    libtesseract-dev \
-    ffmpeg \
-    && pip install --no-cache-dir -r requirements.txt \
+    curl \
+    nodejs \
+    npm \
+    build-essential \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Expose port 8000 for the FastAPI application
+# Install UV package manager
+RUN pip install uv
+
+# Copy the project files
+COPY . /app
+
+# Install dependencies using UV from pyproject.toml
+RUN uv venv .venv && uv pip install --system .
+
+# Install Prettier globally using npm
+RUN npm install -g prettier@3.4.2
+
+# Expose port 8000 for the API
 EXPOSE 8000
 
 # Command to run the FastAPI application

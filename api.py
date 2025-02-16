@@ -1,3 +1,4 @@
+from fastapi import HTTPException, Response
 from pathlib import Path
 import subprocess
 import re
@@ -8,7 +9,84 @@ from fastapi.middleware.cors import CORSMiddleware
 import requests
 import uvicorn
 
+load_dotenv()
+
+API_KEY = os.getenv("AIPROXY_TOKEN")
+
+chat_url = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    # Allows all origins. Replace "*" with specific domains for better security.
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],
+)
+
 S2 = """
+You are an AI-powered automation agent responsible for dynamically generating and executing Python code to complete user tasks.  
+Your primary function is to transform plain English instructions into fully executable, error-free Python scripts that run flawlessly.
+
+---
+
+🛠️ General Rules for Execution:
+1️⃣ Generate Python code that is directly executable without any additional modifications.  
+2️⃣ Ensure all file paths remain within `/data/`. Reject any request that accesses files outside `/data/`.  
+   - ✅ CRITICAL: Always convert `/data/filename` to `./data/filename` for compatibility.  
+Always ensure that any file path starting with /data/ is converted to ./data/ before use.
+For example, /data/logs/ must be converted to ./data/logs/ to comply with the access policy.
+3️⃣ Never delete or modify files unless explicitly required by the task.  
+4️⃣ Read input files before processing to determine their format.  
+5️⃣ If an error occurs during execution, analyze the error, regenerate corrected code, and retry until successful.  
+6️⃣ Include proper error handling in every generated code block to prevent crashes and handle exceptions gracefully.  
+7️⃣ Always strip any code fencing such as ```python or ``` before saving or executing the generated code.  
+8️⃣ For unknown or unclear tasks, return {"error": "unknown_task"} instead of generating random code.  
+9️⃣ Import all required libraries automatically for the code to run successfully.  
+🔟 Ensure that all generated data files go into `./data/`, but `datagen.py` must be created and saved in the project root (`./datagen.py`).
+ Just write code and Handle all the errors. Task is to generate error less code.
+---
+
+📌 Key Points for File Paths and Security:
+- All file paths must stay within `/data/`. Use `./data/` in your code to ensure compatibility.  
+- **ENSURE CORRECT FILE PATHS:** Convert /data/filename to ./data/filename for compatibility. Please ensure this step.
+- Reject requests that involve file operations outside `/data/`, returning:  
+  {"error": "Access denied: Only `./data/` directory is allowed."}  
+- Important Path Rule:  
+  - The `datagen.py` file MUST be created in the project root directory (same level as `api.py`), NOT inside `./data/`.
+  - All other generated data files must be stored in `./data/`.
+- Remove any code fencing from AI-generated code before saving or executing it.  
+
+---
+
+🧠 Error Handling & Self-Correction:
+- If an error occurs during code execution, analyze the traceback and regenerate corrected code until successful execution.
+- If an expected output is not produced, retry execution with adjusted logic.
+- Provide clear, meaningful error messages when tasks fail due to invalid inputs or environment issues.
+
+---
+
+🚀 Best Practices for Code Generation:
+- Import all necessary libraries such as `os`, `json`, `requests`, `pandas`, `pathlib`, `sqlite3`, `bs4`, `pytesseract`, `sklearn`, etc., automatically in every generated code block.
+- Use safe functions from Python's standard library and installed dependencies.
+- Ensure all scripts handle exceptions and validate inputs before performing operations.
+
+---
+
+⚠️ Avoid Common Pitfalls:
+- Never leave the generated code in fenced blocks (` ``` `).  
+- Ensure every generated path is dynamically corrected to `./data/` before code execution.  
+- Do not use `eval()` or `exec()` for untrusted input.  
+- For dynamic tasks, if any error occurs due to missing libraries, retry with all essential imports.
+
+---
+
 You are an AI-powered automation agent responsible for dynamically generating and executing Python code with no comments or fencing to complete user tasks.  
 Your primary function is to transform plain English instructions into **fully executable, error-free Python scripts**.
 You must **self-correct** errors when they occur and reattempt execution until successful.  
@@ -22,57 +100,25 @@ You must **self-correct** errors when they occur and reattempt execution until s
 4️⃣ **Read input files before processing to determine their format.**  
 5️⃣ **If an error occurs during execution, analyze the error and regenerate a corrected version of the script.**  
 6️⃣ **Always include error handling in generated code** to avoid crashes.  
-7️⃣ **For unknown or unclear tasks, return `{"error": "unknown_task"}` instead of generating random code.**  - Only generate valid Python code.
-- Ensure file paths stay within /data/.
-- **ENSURE CORRECT FILE PATHS:** Convert `/data/filename` to `./data/filename` for compatibility.
-
+7️⃣ **For unknown or unclear tasks, return `{"error": "unknown_task"}` instead of generating random code.**  
+8️⃣ **Analyze input files dynamically to determine data format before processing.**
+9️⃣ **Ensure all output files are created exactly as expected, preserving original formats.**
+🔟 **Use correct paths by converting `/data/filename` to `./data/filename` for compatibility.**
+- datagen.py will be in the root directory, not inside `/data`.
 - Do NOT delete or modify system files.
 - Always return executable code, no explanations.
+Always import required libraries dynamically if missing.
+Always use os.getenv() for environment variables like API_KEY.
+If any required variable is not found, fetch it dynamically or raise a clear error.
+Validate all inputs before using them.
+
 
 ---
-
-### **📌 Available Functions & Their Purposes**
-You must generate Python scripts that execute the following tasks:
-
-**🔹 Data Processing & Transformation**
-- **count_wednesdays(source_file, output_file)** → Count the number of Wednesdays in a file.  
-- **sort_contacts(source_file, output_file, sort_by="last_name")** → Sort contacts by last name (or another field if requested).  
-- **get_recent_logs(source_dir, output_file)** → Extract first lines of the 10 most recent log files.  
-- **generate_md_index(source_dir, output_file)** → Create an index of Markdown files based on their first H1 header.  
-- **convert_md_to_html(md_file, output_html_file)** → Convert Markdown to HTML.  
-- **filter_csv(csv_file, filter_column, filter_value, output_json_file)** → Filter a CSV file based on column values and save results as JSON.  
-
-**🔹 LLM-Powered Analysis**
-- **extract_email(source_file, output_file)** → Extract sender’s email address from an email file.  
-- **extract_credit_card_number(source_file, output_file)** → Extract a credit card number from an image and save it without spaces.  
-- **find_most_similar_comments(source_file, output_file)** → Find the most similar pair of comments in a file using embeddings.  
-
-**🔹 Web & API Tasks**
-- **fetch_api_data(api_url, output_file)** → Fetch data from an API and save it as JSON.  
-- **scrape_website(url, output_file)** → Extract text data from a website and save it.  
-
-**🔹 Database & Git Operations**
-- **calculate_gold_ticket_sales(db_file, output_file)** → Compute total sales for “Gold” ticket types in an SQLite database.  
-- **run_sql_query(db_file, query, output_file)** → Execute an SQL query and save the results.  
-- **clone_and_commit(repo_url, commit_message)** → Clone a GitHub repo, make changes, and commit.  
-
-**🔹 Media & Image Processing**
-- **resize_image(image_path, output_path, width, height)** → Resize an image to specific dimensions.  
-- **transcribe_audio(audio_path, output_text_file)** → Convert MP3 speech to text.  
-### **✅ Fix: Strip Triple Backticks Before Saving**
-Modify the part of your code where `generated_task.py` is being written.
-Import all libraries need for code to run
----
-
-### **🚨 Security & Compliance Rules**
-🔴 **B1: Restrict File Access**  
-- Only allow **read/write operations within `/data/`**.  
-- If a user requests access outside `/data/`, return:  
-  {"error": "Access denied: Only `/data/` directory is allowed."}
+✨ Below are some of the example function listing, you can take *hint* from here, be careful beacuse they could generate error, so handle error robustly.
 
 
 
-When using these functions outputs may correct so try out these if any error occurs:
+
 import shutil
 import os
 import json
@@ -114,7 +160,7 @@ app.add_middleware(
 
 load_dotenv()
 
-API_KEY = os.getenv("AIR_PROXY_TOKEN")
+API_KEY = os.getenv("AIPROXY_TOKEN")  ## This is the API Key, use this CODE BLOCK FOR API KEY DEFInation
 
 chat_url = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
 
@@ -124,7 +170,6 @@ headers = {
 }
 
 Data_dir = "./data"
-# root_dir =  "/data"
 
 
 # Task A1
@@ -155,24 +200,35 @@ def install_uv():
 
 
 def run_datagen(user_email: str):
-    Ensures 'uv' is installed, downloads and executes datagen.py to generate required data files.
+    Ensures 'uv' is installed, downloads and executes datagen.py to generate required data files. Please pay attention that datagen.py file will be in root directory not inside data.
 
     Args:
         user_email(str): Email ID to pass as an argument.
+        Make the data dir in current dir
 
     Returns:
         dict: Success or error message.
-    DATA_DIR = Path("data")  # Ensure data is stored in the correct directory
+    dir = Path("data")  # Ensure data is stored in the correct directory
     # user_email = "23f1002560@ds.study.iitm.ac.in"
     DATAGEN_URL = "https://raw.githubusercontent.com/sanand0/tools-in-data-science-public/tds-2025-01/project-1/datagen.py"
-    DATAGEN_SCRIPT = DATA_DIR / "datagen.py"  # Save script in data folder
+    DATAGEN_SCRIPT = Path("./datagen.py")  # This will save it in the root folder
+    # Save script in root folder
+    if "datagen.py" in generated_code:
+    generated_code = generated_code.replace("/data/datagen.py", "./datagen.py")
+    import shutil
+    import os
+
+    if os.path.exists("/app/datagen.py"):
+        shutil.copy("/app/datagen.py", "/tmp/datagen.py")
+
+
     try:
         # ✅ Check if 'uv' is installed
         if not is_uv_installed():
             install_uv()
 
         # ✅ Ensure data directory exists
-        DATA_DIR.mkdir(exist_ok=True)
+        dir.mkdir(exist_ok=True)
 
         # ✅ Download the script if it doesn't exist
         if not DATAGEN_SCRIPT.exists():
@@ -198,10 +254,7 @@ def run_datagen(user_email: str):
     except Exception as e:
         return {"status": "error", "message": f"Unexpected error: {str(e)}"}
 
-# def run_datagen(user_email: str):
-#     url = "https://raw.githubusercontent.com/sanand0/tools-in-data-science-public/tds-2025-01/project-1/datagen.py"
-#     subprocess.run(["curl","-O",url], check=True)
-#     subprocess.run(["python3","datagen.py",user_email, "--root", "./data"], check=True)
+
 
 
 # Task A2
@@ -382,7 +435,10 @@ def extract_sender_email(source_file, output_file):
         ]
     }
 
-    response = requests.post(chat_url, headers=headers, json=llm_payload)
+    response = requests.post("https://aiproxy.sanand.workers.dev/openai/v1/chat/completions", headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}, json=llm_payload)
     sender_email = response.json()["choices"][0]["message"]["content"].strip()
 
     with output_file.open("w", encoding="utf-8") as f:
@@ -442,7 +498,10 @@ def find_most_similar_comments(source_file,output_file):
 
     embedding_response = requests.post(
         "https://aiproxy.sanand.workers.dev/openai/v1/embeddings",
-        headers=headers,
+        headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+},
         json={
             "model": "text-embedding-3-small",
             "input": comments
@@ -767,30 +826,18 @@ def filter_csv(csv_file,filter_column, filter_value, output_json_file):
     filtered_df.to_json(output_file, orient = "records", indent = 4)
     
     print(f"Filtered CSV saved as JSON to {output_json_file}")
+---
+
+### **✅ Important Implementation Details**
+- **Ensure correct paths:** Always convert `/data/filename` to `./data/filename` to ensure compatibility within the project directory.  
+- **Self-correct on errors:** If an error occurs during execution, analyze the error message, regenerate a corrected version of the code, and retry execution until successful.  
+- **No fencing:** Always return plain executable code without backticks or comments.
+- **Ensure output accuracy:** Validate output files to ensure they match expected formats exactly.
+
 
  
- """
+"""
 
-load_dotenv()
-
-API_KEY = os.getenv("AIR_PROXY_TOKEN")
-
-chat_url = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
-
-headers = {
-    "Authorization": f"Bearer {API_KEY}",
-    "Content-Type": "application/json"
-}
-
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    # Allows all origins. Replace "*" with specific domains for better security.
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods
-    allow_headers=["*"],
-)
 
 
 def normalize_path(file_path: str) -> str:
@@ -803,21 +850,24 @@ def normalize_path(file_path: str) -> str:
     return file_path
 
 
+app = FastAPI()
+
+
+DATA_DIR = Path("./data")
+
 @app.get("/read")
 async def read_file(path: str):
-    """Returns the content of a specified file if it exists within /data/"""
-    DATA_DIR = Path("data")
-    file_path = DATA_DIR / Path(path).name  # Restrict path to `/data/`
+    # safe_path = Path(path).name
+    file_path = DATA_DIR / Path(path).relative_to("/data")
 
-    if not file_path.exists() or not file_path.is_file():
+    if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return {"content": file_path.read_text(encoding="utf-8")}
+    with open(file_path, "rb") as file:  # Read in binary mode to avoid auto-formatting
+        content = file.read()
 
-   
-
-
-app = FastAPI()
+    # Return raw content as-is, with correct headers
+    return Response(content, media_type="text/plain; charset=utf-8")
 
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Ensure API key is set
@@ -861,9 +911,10 @@ async def run_task(task: str):
 
         headers = {"Authorization": f"Bearer {API_KEY}",
                    "Content-Type": "application/json"}
-        response = requests.post(chat_url, headers=headers, json=payload)
+        response = requests.post(
+            "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions", headers=headers, json=payload)
         response_json = response.json()
-
+        print(response_json)
         # 🔍 Extract generated code
         code = response_json["choices"][0]["message"]["content"]
         code = re.sub(r"^```python\n|```$", "", code,
@@ -891,12 +942,13 @@ async def run_task(task: str):
         fix_response = requests.post(
             OPENAI_API_URL, headers=headers, json=fix_payload)
         fix_response_json = fix_response.json()
+        print(fix_response)
 
         # 🔍 Extract Fixed Code
         fixed_code = fix_response_json["choices"][0]["message"]["content"]
         fixed_code = re.sub(
             r"^\s*```[\w]*\n|\s*```$", "", fixed_code, flags=re.MULTILINE).strip()
-        print(fixed_code)  # Debug output
+        # print(fixed_code)  # Debug output
 
 
         # 🔥 4️⃣ Execute Fixed Code
@@ -916,4 +968,4 @@ async def run_task(task: str):
 
     
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
